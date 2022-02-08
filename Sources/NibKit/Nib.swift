@@ -46,6 +46,8 @@ public struct Nib {
 	 - Parameter streamReader: The stream to read from.
 	 - Parameter checkVersionCompatibility: If `true` and version of nib in stream is greater than supported version, we throw an error. If `false` version in nib is ignored. */
 	public init(streamReader: StreamReader, checkVersionCompatibility: Bool = true) throws {
+		let initialReadPosition = streamReader.currentReadPosition
+		
 		/* Parse nib header. */
 		let header = try streamReader.readData(size: Self.header.count)
 		guard header == Self.header else {
@@ -66,8 +68,9 @@ public struct Nib {
 		}
 		
 		func readStreamInitableObjects<ObjectType : StreamInitable>(expectedOffset: Int32, objectsCount: Int32) throws -> [ObjectType] {
-			guard Int32(streamReader.currentReadPosition) == expectedOffset else {
-				throw Err.foundUnknownData(offset: streamReader.currentReadPosition)
+			let relativeReadPosition = streamReader.currentReadPosition - initialReadPosition
+			guard Int32(relativeReadPosition) == expectedOffset else {
+				throw Err.foundUnknownData(offset: relativeReadPosition)
 			}
 			return try (0..<objectsCount).map{ _ in try ObjectType(streamReader: streamReader) }
 		}
