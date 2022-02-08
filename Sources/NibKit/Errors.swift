@@ -22,6 +22,11 @@ public enum NibKitError : Error {
 	case invalidHeader
 	case unsupportedVersion
 	
+	/**
+	 In general this error should be ignorable.
+	 We assume every byte has meaning in a nib though, which means the error cannot be ignored. */
+	case unknownDataFound(offset: Int)
+	
 }
 
 typealias Err = NibKitError

@@ -33,7 +33,7 @@ public struct Nib {
 	public var objects: [Object]
 	public var keys: [String]
 	public var entries: [Entry]
-	public var classNames: [String]
+	public var classNames: [ClassName]
 	
 	public init(url: URL) throws {
 		let fh = try FileHandle(forReadingFrom: url)
@@ -65,34 +65,61 @@ public struct Nib {
 			throw Err.unsupportedVersion
 		}
 		
+		func readStreamInitableObjects<ObjectType : StreamInitable>(expectedOffset: Int32, objectsCount: Int32) throws -> [ObjectType] {
+			guard Int32(streamReader.currentReadPosition) == expectedOffset else {
+				throw Err.unknownDataFound(offset: streamReader.currentReadPosition)
+			}
+			return try (0..<objectsCount).map{ _ in try ObjectType(streamReader: streamReader) }
+		}
+		
+		var objects: [Object]!
 		let objectsCountLE:      Int32 = try streamReader.readType()
 		let objectsDataOffsetLE: Int32 = try streamReader.readType()
 		let objectsCount      = Int32(littleEndian: objectsCountLE)
 		let objectsDataOffset = Int32(littleEndian: objectsDataOffsetLE)
+		let objectsSetter = { objects = try readStreamInitableObjects(expectedOffset: objectsDataOffset, objectsCount: objectsCount) }
 		
+		var keys: [String]!
 		let keysCountLE:      Int32 = try streamReader.readType()
 		let keysDataOffsetLE: Int32 = try streamReader.readType()
 		let keysCount      = Int32(littleEndian: keysCountLE)
 		let keysDataOffset = Int32(littleEndian: keysDataOffsetLE)
+		let keysSetter = { keys = try readStreamInitableObjects(expectedOffset: keysDataOffset, objectsCount: keysCount) }
 		
+		var entries: [Entry]!
 		let entriesCountLE:      Int32 = try streamReader.readType()
 		let entriesDataOffsetLE: Int32 = try streamReader.readType()
 		let entriesCount      = Int32(littleEndian: entriesCountLE)
 		let entriesDataOffset = Int32(littleEndian: entriesDataOffsetLE)
+		let entriesSetter = { entries = try readStreamInitableObjects(expectedOffset: entriesDataOffset, objectsCount: entriesCount) }
 		
+		var classNames: [ClassName]!
 		let classNamesCountLE:      Int32 = try streamReader.readType()
 		let classNamesDataOffsetLE: Int32 = try streamReader.readType()
 		let classNamesCount      = Int32(littleEndian: classNamesCountLE)
 		let classNamesDataOffset = Int32(littleEndian: classNamesDataOffsetLE)
+		let classNamesSetter = { classNames = try readStreamInitableObjects(expectedOffset: classNamesDataOffset, objectsCount: classNamesCount) }
 		
-		throw Err.unsupportedVersion
+		let settersAndOffset = [
+			(   objectsDataOffset,    objectsSetter),
+			(      keysDataOffset,       keysSetter),
+			(   entriesDataOffset,    entriesSetter),
+			(classNamesDataOffset, classNamesSetter)
+		]
+		
+		try settersAndOffset.sorted{ $0.0 < $1.0 }.forEach{ try $0.1() }
+		
+		self.objects = objects
+		self.keys = keys
+		self.entries = entries
+		self.classNames = classNames
 	}
 	
 	/**
 	 Memberwise initializer.
 	 
 	 Usually you’ll want to use the stream initializer and its variants (file based). */
-	public init(versionMajor: Int32, versionMinor: Int32, objects: [Nib.Object], keys: [String], entries: [Nib.Entry], classNames: [String]) {
+	public init(versionMajor: Int32, versionMinor: Int32, objects: [Nib.Object], keys: [String], entries: [Nib.Entry], classNames: [ClassName]) {
 		self.versionMajor = versionMajor
 		self.versionMinor = versionMinor
 		self.objects = objects
@@ -101,7 +128,7 @@ public struct Nib {
 		self.classNames = classNames
 	}
 	
-	public struct Object {
+	public struct Object : StreamInitable {
 		
 		public var className: String
 		public var valuesStartIndex: Int
@@ -113,9 +140,13 @@ public struct Nib {
 			self.valuesCount = valuesCount
 		}
 		
+		init(streamReader: StreamReader) throws {
+			throw Err.unsupportedVersion
+		}
+		
 	}
 	
-	public struct Entry {
+	public struct Entry : StreamInitable {
 		
 		public var keyIndex: Int
 		public var value: Value
@@ -123,6 +154,10 @@ public struct Nib {
 		public init(keyIndex: Int, value: Nib.Entry.Value) {
 			self.keyIndex = keyIndex
 			self.value = value
+		}
+		
+		init(streamReader: StreamReader) throws {
+			throw Err.unsupportedVersion
 		}
 		
 		public enum Value {
@@ -143,7 +178,7 @@ public struct Nib {
 		
 	}
 	
-	public struct ClassName {
+	public struct ClassName : StreamInitable {
 		
 		public var extraValues: [Int32]
 		public var className: String
@@ -153,6 +188,26 @@ public struct Nib {
 			self.className = className
 		}
 		
+		init(streamReader: StreamReader) throws {
+			throw Err.unsupportedVersion
+		}
+		
+	}
+	
+}
+
+
+private protocol StreamInitable {
+	
+	init(streamReader: StreamReader) throws
+	
+}
+
+
+extension String : StreamInitable {
+	
+	init(streamReader: StreamReader) throws {
+		throw Err.unsupportedVersion
 	}
 	
 }
