@@ -14,19 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License. */
 
 import Foundation
-import XCTest
-
-@testable import NibKit
 
 
 
-final class NibKitTests: XCTestCase {
+public enum NibKitError : Error {
 	
-	func testNib1() throws {
-		let nib1URL = testsDataURL.appendingPathComponent("nib1.nib")
-		let nib1 = try Nib(url: nib1URL)
-	}
-	
-	private let testsDataURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("TestsData")
+	case invalidHeader
+	case unsupportedVersion
 	
 }
+
+typealias Err = NibKitError
