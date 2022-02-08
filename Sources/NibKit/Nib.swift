@@ -67,7 +67,7 @@ public struct Nib {
 		
 		func readStreamInitableObjects<ObjectType : StreamInitable>(expectedOffset: Int32, objectsCount: Int32) throws -> [ObjectType] {
 			guard Int32(streamReader.currentReadPosition) == expectedOffset else {
-				throw Err.unknownDataFound(offset: streamReader.currentReadPosition)
+				throw Err.foundUnknownData(offset: streamReader.currentReadPosition)
 			}
 			return try (0..<objectsCount).map{ _ in try ObjectType(streamReader: streamReader) }
 		}
@@ -130,18 +130,20 @@ public struct Nib {
 	
 	public struct Object : StreamInitable {
 		
-		public var className: String
+		public var classNameIndex: Int
 		public var valuesStartIndex: Int
 		public var valuesCount: Int
 		
-		public init(className: String, valuesStartIndex: Int, valuesCount: Int) {
-			self.className = className
+		public init(classNameIndex: Int, valuesStartIndex: Int, valuesCount: Int) {
+			self.classNameIndex = classNameIndex
 			self.valuesStartIndex = valuesStartIndex
 			self.valuesCount = valuesCount
 		}
 		
 		init(streamReader: StreamReader) throws {
-			throw Err.unsupportedVersion
+			self.classNameIndex   = try streamReader.readVarint()
+			self.valuesStartIndex = try streamReader.readVarint()
+			self.valuesCount      = try streamReader.readVarint()
 		}
 		
 	}
@@ -157,7 +159,52 @@ public struct Nib {
 		}
 		
 		init(streamReader: StreamReader) throws {
-			throw Err.unsupportedVersion
+			self.keyIndex = try streamReader.readVarint()
+			let valueType: UInt8 = try streamReader.readType()
+			switch valueType {
+				case 0:
+					self.value = try .int8(streamReader.readType())
+					
+				case 1:
+					let valueLE: Int16 = try streamReader.readType()
+					self.value = .int16(Int16(littleEndian: valueLE))
+					
+				case 2:
+					let valueLE: Int32 = try streamReader.readType()
+					self.value = .int32(Int32(littleEndian: valueLE))
+					
+				case 3:
+					let valueLE: Int64 = try streamReader.readType()
+					self.value = .int64(Int64(littleEndian: valueLE))
+					
+				case 4:
+					self.value = .true
+					
+				case 5:
+					self.value = .false
+					
+				case 6:
+					self.value = try .float(streamReader.readType())
+					
+				case 7:
+					self.value = try .double(streamReader.readType())
+					
+				case 8:
+					/* Note: Reverse engineer doc says data then varint for size; I did the reverse! I don’t see how it’d work otherwise. */
+					let dataSize = try streamReader.readVarint()
+					self.value = try .data(streamReader.readData(size: dataSize))
+					
+				case 9:
+					self.value = .nil
+					
+				case 10:
+					let offsetLE: Int32 = try streamReader.readType()
+					let offset = Int32(littleEndian: offsetLE)
+					self.value = .object(atIndex: Int(offset))
+					
+				default:
+					throw Err.foundUnknownValueType(valueType)
+			}
 		}
 		
 		public enum Value {
@@ -189,7 +236,20 @@ public struct Nib {
 		}
 		
 		init(streamReader: StreamReader) throws {
-			throw Err.unsupportedVersion
+			let classNameLength  = try streamReader.readVarint()
+			let extraValuesCount = try streamReader.readVarint()
+			self.extraValues = try (0..<extraValuesCount).map{ _ in
+				let valLE: Int32 = try streamReader.readType()
+				return Int32(littleEndian: valLE)
+			}
+			let classNameData = try streamReader.readData(size: classNameLength)
+			guard classNameData.last == 0 else {
+				throw Err.foundUnterminatedString(data: classNameData)
+			}
+			self.className = classNameData.withUnsafeBytes{ rawBufferPointer in
+				/* baseAddress is bang-safe because we are certain the classNameData contains at least one element (the final 0). */
+				String(cString: rawBufferPointer.baseAddress!.assumingMemoryBound(to: UInt8.self))
+			}
 		}
 		
 	}
@@ -206,8 +266,16 @@ private protocol StreamInitable {
 
 extension String : StreamInitable {
 	
+	/* Specifically this is the “Key” format.
+	 * Some other strings are encoded differently. */
 	init(streamReader: StreamReader) throws {
-		throw Err.unsupportedVersion
+		let keyLength = try streamReader.readVarint()
+		let keyData = try streamReader.readData(size: keyLength)
+		guard let initialized = Self(data: keyData, encoding: .utf8) else {
+			throw Err.foundInvalidUtf8String(data: keyData)
+		}
+		
+		self = initialized
 	}
 	
 }

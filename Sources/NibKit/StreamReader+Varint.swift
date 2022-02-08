@@ -15,24 +15,32 @@ limitations under the License. */
 
 import Foundation
 
+import StreamReader
 
 
-public enum NibKitError : Error {
+
+extension StreamReader {
 	
-	case invalidHeader
-	case unsupportedVersion
-	
-	/**
-	 In general this error should be ignorable.
-	 We assume every byte has meaning in a nib though, which means the error cannot be ignored. */
-	case foundUnknownData(offset: Int)
-	
-	case foundUnknownValueType(UInt8)
-	
-	case foundTooBigVarint
-	case foundInvalidUtf8String(data: Data)
-	case foundUnterminatedString(data: Data)
+	func readVarint() throws -> Int {
+		var res = 0
+		var curByte: UInt8
+		var curBitNumber = 0
+		
+		repeat {
+			curByte = try readType()
+			var curByteAsInt = Int(0)
+			withUnsafeMutableBytes(of: &curByteAsInt, { bytes in
+				bytes.baseAddress?.storeBytes(of: curByte, as: UInt8.self)
+			})
+			res |= Int(curByte & ~0b1000_0000) << curBitNumber
+			curBitNumber += 7
+		} while (curByte & 0b1000_0000) == 0
+		
+		guard curBitNumber <= MemoryLayout<Int>.size * 8 else {
+			throw Err.foundTooBigVarint
+		}
+		
+		return res
+	}
 	
 }
-
-typealias Err = NibKitError
