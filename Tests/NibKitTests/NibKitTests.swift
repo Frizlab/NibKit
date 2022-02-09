@@ -23,10 +23,14 @@ import XCTest
 final class NibKitTests : XCTestCase {
 	
 	func testNib1() throws {
-		let nib1URL = testsDataURL.appendingPathComponent("nib1.nib")
-		let nib1 = try Nib(url: nib1URL)
+		let nib1Data = try Data(contentsOf: testsDataURL.appendingPathComponent("nib1.nib"))
+		
+		let nib1 = try Nib(data: nib1Data)
 		XCTAssertEqual(nib1.versionMajor, 1)
 		XCTAssertEqual(nib1.versionMinor, 10)
+		try XCTAssertEqual(nib1Data, nib1.serialized())
+		
+		try nib1.serialized().write(to: URL(fileURLWithPath: "/Users/frizlab/Desktop/nib1bis.nib"))
 	}
 	
 	private let testsDataURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("TestsData")

@@ -33,6 +33,11 @@ public enum NibKitError : Error {
 	case foundInvalidUtf8String(data: Data)
 	case foundUnterminatedString(data: Data)
 	
+	/** An error occurred writing to the stream. */
+	case cannotWriteToStream(streamError: Error?)
+	
+	case internalError
+	
 }
 
 typealias Err = NibKitError

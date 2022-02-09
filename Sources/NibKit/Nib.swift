@@ -40,6 +40,10 @@ public struct Nib {
 		try self.init(streamReader: FileHandleReader(stream: fh, bufferSize: 512, bufferSizeIncrement: 128, readSizeLimit: nil, underlyingStreamReadSizeLimit: nil))
 	}
 	
+	public init(data: Data) throws {
+		try self.init(streamReader: DataReader(data: data))
+	}
+	
 	/**
 	 Parse a nib from a stream.
 	 
@@ -131,6 +135,63 @@ public struct Nib {
 		self.classNames = classNames
 	}
 	
+	public func serialized(skipSkizes: Bool = false) throws -> Data {
+		let stream = OutputStream(toMemory: ())
+		
+		stream.open()
+		defer {stream.close()}
+		
+		var written = 0
+		written += try stream.write(data: Self.header)
+		written += try stream.write(intAsLittleEndian: versionMajor)
+		written += try stream.write(intAsLittleEndian: versionMinor)
+		
+		written += try stream.write(intAsLittleEndian: Int32(objects.count))
+		let objectsOffsetOffset = written
+		written += try stream.write(intAsLittleEndian: Int32(0)) /* Start offset. */
+		
+		written += try stream.write(intAsLittleEndian: Int32(keys.count))
+		let keysOffsetOffset = written
+		written += try stream.write(intAsLittleEndian: Int32(0)) /* Start offset. */
+		
+		written += try stream.write(intAsLittleEndian: Int32(entries.count))
+		let entriesOffsetOffset = written
+		written += try stream.write(intAsLittleEndian: Int32(0)) /* Start offset. */
+		
+		written += try stream.write(intAsLittleEndian: Int32(classNames.count))
+		let classNamesOffsetOffset = written
+		written += try stream.write(intAsLittleEndian: Int32(0)) /* Start offset. */
+		
+		let objectsOffset = written
+		written += try objects.reduce(0, { try $0 + $1.write(to: stream) })
+		
+		let keysOffset = written
+		written += try keys.reduce(0, { try $0 + $1.write(to: stream) })
+		
+		let entriesOffset = written
+		written += try entries.reduce(0, { try $0 + $1.write(to: stream) })
+		
+		let classNamesOffset = written
+		written += try classNames.reduce(0, { try $0 + $1.write(to: stream) })
+		
+		guard let nsdata = stream.property(forKey: Stream.PropertyKey.dataWrittenToMemoryStreamKey) as? NSData else {
+			throw Err.internalError
+		}
+		
+		var data = Data(referencing: nsdata)
+		if !skipSkizes {
+			data.withUnsafeMutableBytes{ (bytes: UnsafeMutableRawBufferPointer) -> Void in
+				let baseAddress = bytes.baseAddress!
+				(baseAddress +    objectsOffsetOffset).bindMemory(to: type(of:    objectsOffset), capacity: 1).pointee =    objectsOffset
+				(baseAddress +       keysOffsetOffset).bindMemory(to: type(of:       keysOffset), capacity: 1).pointee =       keysOffset
+				(baseAddress +    entriesOffsetOffset).bindMemory(to: type(of:    entriesOffset), capacity: 1).pointee =    entriesOffset
+				(baseAddress + classNamesOffsetOffset).bindMemory(to: type(of: classNamesOffset), capacity: 1).pointee = classNamesOffset
+			}
+		}
+		
+		return data
+	}
+	
 	public struct Object : StreamInitable {
 		
 		public var classNameIndex: Int
@@ -147,6 +208,14 @@ public struct Nib {
 			self.classNameIndex   = try streamReader.readVarint()
 			self.valuesStartIndex = try streamReader.readVarint()
 			self.valuesCount      = try streamReader.readVarint()
+		}
+		
+		func write(to stream: OutputStream) throws -> Int {
+			var res = 0
+			res += try stream.write(varint: classNameIndex)
+			res += try stream.write(varint: valuesStartIndex)
+			res += try stream.write(varint: valuesCount)
+			return res
 		}
 		
 	}
@@ -193,7 +262,6 @@ public struct Nib {
 					self.value = try .double(streamReader.readType())
 					
 				case 8:
-					/* Note: Reverse engineer doc says data then varint for size; I did the reverse! I don’t see how it’d work otherwise. */
 					let dataSize = try streamReader.readVarint()
 					self.value = try .data(streamReader.readData(size: dataSize))
 					
@@ -208,6 +276,70 @@ public struct Nib {
 				default:
 					throw Err.foundUnknownValueType(valueType)
 			}
+		}
+		
+		func write(to stream: OutputStream) throws -> Int {
+			var res = 0
+			res += try stream.write(varint: keyIndex)
+			switch value {
+				case .int8(var int8):
+					var valueType: UInt8 = 0
+					res += try stream.write(value: &valueType)
+					res += try stream.write(value: &int8)
+					
+				case .int16(let int16):
+					var valueType: UInt8 = 1
+					var int16LE = int16.littleEndian
+					res += try stream.write(value: &valueType)
+					res += try stream.write(value: &int16LE)
+					
+				case .int32(let int32):
+					var valueType: UInt8 = 2
+					var int32LE = int32.littleEndian
+					res += try stream.write(value: &valueType)
+					res += try stream.write(value: &int32LE)
+					
+				case .int64(let int64):
+					var valueType: UInt8 = 3
+					var int64LE = int64.littleEndian
+					res += try stream.write(value: &valueType)
+					res += try stream.write(value: &int64LE)
+					
+				case .true:
+					var valueType: UInt8 = 4
+					res += try stream.write(value: &valueType)
+					
+				case .false:
+					var valueType: UInt8 = 5
+					res += try stream.write(value: &valueType)
+					
+				case .float(var float32):
+					var valueType: UInt8 = 6
+					res += try stream.write(value: &valueType)
+					res += try stream.write(value: &float32)
+					
+				case .double(var float64):
+					var valueType: UInt8 = 7
+					res += try stream.write(value: &valueType)
+					res += try stream.write(value: &float64)
+					
+				case .data(let data):
+					var valueType: UInt8 = 8
+					res += try stream.write(value: &valueType)
+					res += try stream.write(varint: data.count)
+					res += try stream.write(data: data)
+					
+				case .nil:
+					var valueType: UInt8 = 9
+					res += try stream.write(value: &valueType)
+					
+				case .object(let index):
+					var valueType: UInt8 = 10
+					var indexLE = index.littleEndian
+					res += try stream.write(value: &valueType)
+					res += try stream.write(value: &indexLE)
+			}
+			return res
 		}
 		
 		public enum Value {
@@ -255,6 +387,19 @@ public struct Nib {
 			}
 		}
 		
+		func write(to stream: OutputStream) throws -> Int {
+			guard let cString = className.cString(using: .utf8) else {
+				throw Err.internalError
+			}
+			
+			var res = 0
+			res += try stream.write(varint: cString.count)
+			res += try stream.write(varint: extraValues.count)
+			res += try extraValues.reduce(0, { try $0 + stream.write(intAsLittleEndian: $1) })
+			res += try cString.withUnsafeBytes{ try stream.write(dataPtr: $0) }
+			return res
+		}
+		
 	}
 	
 }
@@ -279,6 +424,15 @@ extension String : StreamInitable {
 		}
 		
 		self = initialized
+	}
+	
+	func write(to stream: OutputStream) throws -> Int {
+		let utf8Data = Data(utf8)
+		
+		var res = 0
+		res += try stream.write(varint: utf8Data.count)
+		res += try stream.write(data: utf8Data)
+		return res
 	}
 	
 }

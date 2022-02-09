@@ -30,9 +30,9 @@ extension StreamReader {
 			curByte = try readType()
 			var curByteAsInt = Int(0)
 			withUnsafeMutableBytes(of: &curByteAsInt, { bytes in
-				bytes.baseAddress?.storeBytes(of: curByte, as: UInt8.self)
+				bytes.baseAddress!.storeBytes(of: curByte, as: UInt8.self)
 			})
-			res |= Int(curByte & ~0b1000_0000) << curBitNumber
+			res |= (curByteAsInt & 0b0111_1111) << curBitNumber
 			curBitNumber += 7
 		} while (curByte & 0b1000_0000) == 0
 		
