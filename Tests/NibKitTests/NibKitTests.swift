@@ -29,8 +29,6 @@ final class NibKitTests : XCTestCase {
 		XCTAssertEqual(nib1.versionMajor, 1)
 		XCTAssertEqual(nib1.versionMinor, 10)
 		try XCTAssertEqual(nib1Data, nib1.serialized())
-		
-		try nib1.serialized().write(to: URL(fileURLWithPath: "/Users/frizlab/Desktop/nib1bis.nib"))
 	}
 	
 	private let testsDataURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("TestsData")
