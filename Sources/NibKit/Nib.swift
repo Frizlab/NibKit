@@ -183,10 +183,10 @@ public struct Nib {
 		if !skipSkizes {
 			data.withUnsafeMutableBytes{ (bytes: UnsafeMutableRawBufferPointer) -> Void in
 				let baseAddress = bytes.baseAddress!
-				(baseAddress +    objectsOffsetOffset).bindMemory(to: type(of:    objectsOffset), capacity: 1).pointee =    objectsOffset
-				(baseAddress +       keysOffsetOffset).bindMemory(to: type(of:       keysOffset), capacity: 1).pointee =       keysOffset
-				(baseAddress +    entriesOffsetOffset).bindMemory(to: type(of:    entriesOffset), capacity: 1).pointee =    entriesOffset
-				(baseAddress + classNamesOffsetOffset).bindMemory(to: type(of: classNamesOffset), capacity: 1).pointee = classNamesOffset
+				(baseAddress +    objectsOffsetOffset).bindMemory(to: Int32.self, capacity: 1).pointee = Int32(objectsOffset)
+				(baseAddress +       keysOffsetOffset).bindMemory(to: Int32.self, capacity: 1).pointee = Int32(keysOffset)
+				(baseAddress +    entriesOffsetOffset).bindMemory(to: Int32.self, capacity: 1).pointee = Int32(entriesOffset)
+				(baseAddress + classNamesOffsetOffset).bindMemory(to: Int32.self, capacity: 1).pointee = Int32(classNamesOffset)
 			}
 		}
 		
