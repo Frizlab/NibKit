@@ -336,7 +336,7 @@ public struct Nib {
 					
 				case .object(let index):
 					var valueType: UInt8 = 10
-					var indexLE = index.littleEndian
+					var indexLE = Int32(index).littleEndian
 					res += try stream.write(value: &valueType)
 					res += try stream.write(value: &indexLE)
 			}
