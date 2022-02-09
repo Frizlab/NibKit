@@ -58,7 +58,7 @@ extension OutputStream {
 		var res = 0
 		var currentValue = varint
 		repeat {
-			var toWrite = withUnsafeBytes(of: currentValue, { bytes in bytes.last! & 0b0111_1111 })
+			var toWrite = withUnsafeBytes(of: currentValue, { bytes in bytes.first! & 0b0111_1111 })
 			
 			currentValue >>= 7
 			if currentValue == 0 {toWrite |= 0b1000_0000}

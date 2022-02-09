@@ -28,6 +28,9 @@ final class VarintTests : XCTestCase {
 		try XCTAssertEqual(DataReader(data: Data([0b1000_0000])).readVarint(), 0b0000_0000)
 		try XCTAssertEqual(DataReader(data: Data([0b1010_1010])).readVarint(), 0b0010_1010)
 		try XCTAssertEqual(DataReader(data: Data([0b1111_1111])).readVarint(), 0b0111_1111)
+		
+		try XCTAssertEqual(data(from: 0),   Data([0b1000_0000]))
+		try XCTAssertEqual(data(from: 127), Data([0b1111_1111]))
 	}
 	
 	func testVarint2Bytes() throws {
@@ -43,6 +46,20 @@ final class VarintTests : XCTestCase {
 		try XCTAssertEqual(DataReader(data: Data([0b0000_0000, 0b0100_0000, 0b1100_0000])).readVarint(), 0b0001_0000_0010_0000_0000_0000)
 		try XCTAssertEqual(DataReader(data: Data([0b0000_0000, 0b0100_0000, 0b1000_0000])).readVarint(), 0b0000_0000_0010_0000_0000_0000)
 		try XCTAssertEqual(DataReader(data: Data([0b0000_0000, 0b0000_0000, 0b1100_0000])).readVarint(), 0b0001_0000_0000_0000_0000_0000)
+	}
+	
+	private func data(from varint: Int) throws -> Data {
+		let stream = OutputStream(toMemory: ())
+		stream.open(); defer {stream.close()}
+		
+		_ = try stream.write(varint: varint)
+		
+		/* Note: Are we really allowed to access dataWrittenToMemoryStreamKey while the stream is not closed? */
+		guard let nsdata = stream.property(forKey: Stream.PropertyKey.dataWrittenToMemoryStreamKey) as? NSData else {
+			throw Err.internalError
+		}
+		
+		return Data(referencing: nsdata)
 	}
 	
 }
